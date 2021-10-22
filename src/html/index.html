@@ -1,0 +1,95 @@
+<html>
+  <head>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <style>
+      body {
+        height: 100vh;
+      }
+     .flex {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+     }
+    .arrows {
+      font-size:50px;
+      color:red;
+    }
+    .circularArrows {
+      font-size:50px;
+      color:blue;
+    }
+    tr {
+      height: 20px;
+      width: 100%;
+    }
+    .alternative tr{
+      height: 20px;
+      width: 25px;
+    } 
+    td {
+      background-color:black;
+      border-radius:25%;
+      box-shadow: 5px 5px #888888;
+      width: 60px;
+    }
+    td:active {
+      transform: translate(5px,5px);
+      box-shadow: none; 
+    }
+    .noselect {
+      -webkit-touch-callout: none; /* iOS Safari */
+        -webkit-user-select: none; /* Safari */
+         -khtml-user-select: none; /* Konqueror HTML */
+           -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* Internet Explorer/Edge */
+                user-select: none; /* Non-prefixed version, currently
+                                      supported by Chrome and Opera */
+    }
+    </style>
+  </head>
+  <body class="noselect" align="center" style="background-color:white">
+    <div class=flex>
+      <table id="mainTable" style="display: inline-block;margin:auto;table-layout:fixed;text-align: center">
+        <tr>
+            <th>Acionamentos</th>
+          </tr>
+          <tr class="alternative">
+            <td ontouchstart='onTouchStartAndEnd("11")' class="arrows">Abrir/fechar portão</td>
+          </tr>
+      </table>
+  
+      <table id="mainTable" style="display:inline-block;margin:auto;table-layout:fixed">
+        <tr>
+          <th>Alternative buttons</th>
+        </tr>
+        <tr class="alternative">
+          <td ontouchstart='onTouchStartAndEnd("11")' class="arrows">Histórico</td>
+        </tr>
+      </table>
+    </div>
+    
+    <script>
+      var webSocketUrl = "ws:\/\/" + window.location.hostname + "/ws";
+      var websocket;
+      
+      function initWebSocket() 
+      {
+        websocket = new WebSocket(webSocketUrl);
+        websocket.onopen    = function(event){};
+        websocket.onclose   = function(event){setTimeout(initWebSocket, 2000);};
+        websocket.onmessage = function(event){};
+      }
+      function onTouchStartAndEnd(value) 
+      {
+        websocket.send(value);
+      }
+          
+      window.onload = initWebSocket;
+      document.getElementById("mainTable").addEventListener("touchend", function(event){
+        event.preventDefault()
+      });      
+    </script>
+    
+  </body>
+</html>
