@@ -21,10 +21,25 @@
 #include <WiFi.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
+#include <EEPROM.h>
+
+
+#define BACKWARD 0
+#define FORWARD 1
+
+#define OPEN_CLOSE 0
+#define HISTORY 1
 
 
 AsyncWebServer server(80); //Declara um servidor com porta 80
 AsyncWebSocket ws("/ws"); //Declara um metodo para socket cliente
+
+
+bool motorRunning = false;
+int relayForward = 0;
+int relayBackward = 0;
+int GPIO_BOTAO = 4;
+int GPIO_REED = 5;
 
 
 //Página root do HTML do servidor
@@ -84,36 +99,19 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
     <div class=flex>
       <table id="mainTable" style="display: inline-block;margin:auto;table-layout:fixed;text-align: center">
         <tr>
-          <td ontouchstart='onTouchStartAndEnd("5")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#11017;</span></td>
-          <td ontouchstart='onTouchStartAndEnd("1")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#8679;</span></td>
-          <td ontouchstart='onTouchStartAndEnd("6")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#11016;</span></td>
-        </tr>
-        
-        <tr>
-          <td ontouchstart='onTouchStartAndEnd("3")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#8678;</span></td>
-          <td></td>    
-          <td ontouchstart='onTouchStartAndEnd("4")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#8680;</span></td>
-        </tr>
-        
-        <tr>
-          <td ontouchstart='onTouchStartAndEnd("7")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#11019;</span></td>
-          <td ontouchstart='onTouchStartAndEnd("2")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#8681;</span></td>
-          <td ontouchstart='onTouchStartAndEnd("8")' ontouchend='onTouchStartAndEnd("0")'><span class="arrows" >&#11018;</span></td>
-        </tr>
-      
-        <tr>
-          <td ontouchstart='onTouchStartAndEnd("9")' ontouchend='onTouchStartAndEnd("0")'><span class="circularArrows" >&#8634;</span></td>
-          <td style="background-color:white;box-shadow:none"></td>
-          <td ontouchstart='onTouchStartAndEnd("10")' ontouchend='onTouchStartAndEnd("0")'><span class="circularArrows" >&#8635;</span></td>
-        </tr>
+            <th>Acionamentos</th>
+          </tr>
+          <tr class="alternative">
+            <td ontouchstart='onTouchStartAndEnd("0")' class="arrows">Abrir/fechar portão</td>
+          </tr>
       </table>
   
-      <table id="mainTable" style=";display:inline-block;margin:auto;table-layout:fixed">
+      <table id="mainTable" style="display:inline-block;margin:auto;table-layout:fixed">
         <tr>
           <th>Alternative buttons</th>
         </tr>
         <tr class="alternative">
-          <td ontouchstart='onTouchStartAndEnd("11")' class="arrows">&#8622;</td>
+          <td ontouchstart='onTouchStartAndEnd("1")' class="arrows">Histórico</td>
         </tr>
       </table>
     </div>
@@ -144,9 +142,85 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
 </html> 
 )HTMLHOMEPAGE";
 
+//pega o valor de estado da eeprom
+bool getMotorState() {
+    return EEPROM.read(0);
+}
+
+
+//Salva estado de abertura como um bool na eprrom
+void setMotorState(bool state) {
+
+    if(state == FORWARD){
+      EEPROM.write(0, 1);
+    }else if(state == BACKWARD){
+      EEPROM.write(0, 0);
+
+    }
+}
+
+
+//Usar uma reedswitch com interrupção, ou seja, cada vez que o portão chegar ao limite, inicial ou final, ele desliga os reles e inverte o estado do portão.
+
+void startStopMotor() {
+    bool state = getMotorState();
+
+    if(state == FORWARD && !motorRunning){ //FORWARD
+
+        digitalWrite(relayForward, HIGH);
+        digitalWrite(relayBackward, LOW);
+        motorRunning = true;
+        
+    }else if(state == BACKWARD && !motorRunning){ //BACKWARD
+
+        digitalWrite(relayForward,  LOW);
+        digitalWrite(relayBackward, HIGH);
+        motorRunning = true;      
+
+    }
+
+
+    digitalWrite(relayForward, LOW);
+    digitalWrite(relayBackward, LOW);
+    setMotorState(!state);
+    motorRunning = false;
+
+}
+
+
+void processAction(String inputValue)
+{
+  Serial.printf("Got value as %s %d\n", inputValue.c_str(), inputValue.toInt());
+
+  switch(inputValue.toInt())
+  {
+
+    case OPEN_CLOSE:
+      startStopMotor();
+      break;
+  
+    case HISTORY:
+      
+       
+      break;
+    
+  
+    default:
+        
+      break;
+  }
+}
+
+
+
 
 
 void handleRoot(AsyncWebServerRequest *request) //Para a raiz do servidor executa o HTML
+{
+  request->send_P(200, "text/html", htmlHomePage);
+}
+
+void handleHistory(AsyncWebServerRequest *request) //Para a raiz do servidor executa o HTML
 {
   request->send_P(200, "text/html", htmlHomePage);
 }
@@ -179,7 +253,8 @@ void onWebSocketEvent(AsyncWebSocket *server,
       if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) 
       {
         std::string myData = "";
-        myData.assign((char *)data, len);     
+        myData.assign((char *)data, len);
+        processAction(myData.c_str());       
       }
       break;
     case WS_EVT_PONG:
@@ -191,8 +266,31 @@ void onWebSocketEvent(AsyncWebSocket *server,
 }
 
 
+void IRAM_ATTR funcao_ISR() {
+
+  startStopMotor();
+
+}
+
+void IRAM_ATTR endMotor() {
+
+  startStopMotor();
+    
+}
+
+
+
+
 void setup() {
     // put your setup code here, to run once:
+    
+attachInterrupt(digitalPinToInterrupt(GPIO_BOTAO), funcao_ISR, RISING);
+
+//Interrupção para controle e uma para página web.
+
+attachInterrupt(digitalPinToInterrupt(GPIO_REED), endMotor, RISING);
+
+
     Serial.begin(9600);
 
     //WiFiManager
@@ -223,6 +321,7 @@ void setup() {
       Serial.println("Não é ESP-Ap");
 
       server.on("/", HTTP_GET, handleRoot); //Caso o cliente entre na rota raiz, executa handleRoot
+      server.on("/history", HTTP_GET, handleHistory); //Caso o cliente entre na rota raiz, executa handleRoot
       server.onNotFound(handleNotFound);//Caso o cliente entre fora da rota raiz, executa handleNotFound
       
       ws.onEvent(onWebSocketEvent); //Quando houver uma mudança no wesocket executa a função de callback onWebSocketEvent
@@ -247,4 +346,5 @@ void loop() {
     if(WiFi.SSID() != "ESP_AP"){
       ws.cleanupClients(); //Limpa os clientes, caso exceda o número máximo
     }
+
 }
