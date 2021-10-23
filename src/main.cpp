@@ -47,7 +47,7 @@ bool debounce = false;
 
 unsigned long saveDebounceTimeout = 0;
  
-unsigned long DEBOUNCETIME = 100;
+unsigned long DEBOUNCETIME = 200;
 
 
 //Página root do HTML do servidor
@@ -291,7 +291,6 @@ void IRAM_ATTR funcao_ISR() {
 
 void IRAM_ATTR endMotor() {
   endCourse = true;
-  debounce = true;
 }
 
 
@@ -377,19 +376,21 @@ void loop() {
       interruption = false;
     }
     
-    if(debounce){
+    if(endCourse){
       saveDebounceTimeout = millis();
-      debounce = false;
+      endCourse = false;
+      debounce = true;
     }
 
     //se o tempo passado foi maior que o configurado para o debounce e o número de interrupções ocorridas é maior que ZERO (ou seja, ocorreu alguma), realiza os procedimentos
-    if( (millis() - saveDebounceTimeout) > DEBOUNCETIME && endCourse ){
+    if( (millis() - saveDebounceTimeout) > DEBOUNCETIME && digitalRead(21) && debounce){
       
       bool state = getMotorState();
       digitalWrite(relayForward, LOW);
       digitalWrite(relayBackward, LOW);
       setMotorState(!state);
       motorRunning = false;
+      debounce = false;
       endCourse = false;
     }
 
