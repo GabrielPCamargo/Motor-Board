@@ -36,10 +36,13 @@ AsyncWebSocket ws("/ws"); //Declara um metodo para socket cliente
 
 
 bool motorRunning = false;
-int relayForward = 0;
-int relayBackward = 0;
+int relayForward = 26;
+int relayBackward = 25;
 int GPIO_BOTAO = 4;
-int GPIO_REED = 5;
+int GPIO_REED = 21;
+
+bool interruption = false;
+bool endCourse = false;
 
 
 //Página root do HTML do servidor
@@ -144,7 +147,7 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
 
 //pega o valor de estado da eeprom
 bool getMotorState() {
-    return EEPROM.read(0);
+  return EEPROM.read(0);
 }
 
 
@@ -152,11 +155,12 @@ bool getMotorState() {
 void setMotorState(bool state) {
 
     if(state == FORWARD){
-      EEPROM.write(0, 1);
+      EEPROM.write(0, FORWARD);
     }else if(state == BACKWARD){
-      EEPROM.write(0, 0);
-
+      EEPROM.write(0, BACKWARD);
     }
+
+    EEPROM.commit();
 }
 
 
@@ -164,6 +168,8 @@ void setMotorState(bool state) {
 
 void startStopMotor() {
     bool state = getMotorState();
+    Serial.println("startStopMotor");
+    Serial.println(state);
 
     if(state == FORWARD && !motorRunning){ //FORWARD
 
@@ -177,13 +183,13 @@ void startStopMotor() {
         digitalWrite(relayBackward, HIGH);
         motorRunning = true;      
 
+    }else{
+      digitalWrite(relayForward, LOW);
+      digitalWrite(relayBackward, LOW);
+      setMotorState(!state);
+      motorRunning = false;
+      Serial.println(getMotorState());
     }
-
-
-    digitalWrite(relayForward, LOW);
-    digitalWrite(relayBackward, LOW);
-    setMotorState(!state);
-    motorRunning = false;
 
 }
 
@@ -196,6 +202,8 @@ void processAction(String inputValue)
   {
 
     case OPEN_CLOSE:
+    Serial.println("oppen-Close");
+
       startStopMotor();
       break;
   
@@ -268,14 +276,12 @@ void onWebSocketEvent(AsyncWebSocket *server,
 
 void IRAM_ATTR funcao_ISR() {
 
-  startStopMotor();
+  interruption = true;
 
 }
 
 void IRAM_ATTR endMotor() {
-
-  startStopMotor();
-    
+  endCourse = true;
 }
 
 
@@ -284,15 +290,24 @@ void IRAM_ATTR endMotor() {
 void setup() {
     // put your setup code here, to run once:
     
-attachInterrupt(digitalPinToInterrupt(GPIO_BOTAO), funcao_ISR, RISING);
+
 
 //Interrupção para controle e uma para página web.
 
-attachInterrupt(digitalPinToInterrupt(GPIO_REED), endMotor, RISING);
+    
+
+    EEPROM.begin(1);
 
 
     Serial.begin(9600);
 
+    pinMode(relayForward, OUTPUT);
+    pinMode(relayBackward, OUTPUT);
+    pinMode(GPIO_BOTAO, INPUT);
+    pinMode(GPIO_REED, INPUT);
+
+    attachInterrupt(digitalPinToInterrupt(GPIO_BOTAO), funcao_ISR, RISING);
+    attachInterrupt(digitalPinToInterrupt(GPIO_REED), endMotor, RISING);
     //WiFiManager
     //Local intialization. Once its business is done, there is no need to keep it around
     WiFiManager wifiManager;
@@ -345,6 +360,20 @@ void loop() {
 
     if(WiFi.SSID() != "ESP_AP"){
       ws.cleanupClients(); //Limpa os clientes, caso exceda o número máximo
+    }
+
+    if(interruption){ 
+      startStopMotor();
+      interruption = false;
+    }
+    
+    if(endCourse){ 
+      bool state = getMotorState();
+      digitalWrite(relayForward, LOW);
+      digitalWrite(relayBackward, LOW);
+      setMotorState(!state);
+      motorRunning = false;
+      endCourse = false;
     }
 
 }
