@@ -43,6 +43,11 @@ int GPIO_REED = 21;
 
 bool interruption = false;
 bool endCourse = false;
+bool debounce = false;
+
+unsigned long saveDebounceTimeout = 0;
+ 
+unsigned long DEBOUNCETIME = 100;
 
 
 //Página root do HTML do servidor
@@ -51,6 +56,7 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
 <html>
   <head>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta charset="UTF-8">
     <style>
       body {
         height: 100vh;
@@ -105,16 +111,16 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
             <th>Acionamentos</th>
           </tr>
           <tr class="alternative">
-            <td ontouchstart='onTouchStartAndEnd("0")' class="arrows">Abrir/fechar portão</td>
+            <td ontouchstart='onTouchStartAndEnd("0")' onclick='onTouchStartAndEnd("0")' class="arrows">Abrir/fechar portão</td>
           </tr>
       </table>
   
-      <table id="mainTable" style="display:inline-block;margin:auto;table-layout:fixed">
+      <table id=testTable" style="display:inline-block;margin:auto;table-layout:fixed">
         <tr>
           <th>Alternative buttons</th>
         </tr>
         <tr class="alternative">
-          <td ontouchstart='onTouchStartAndEnd("1")' class="arrows">Histórico</td>
+          <td ontouchstart='onTouchStartAndEnd("1")' onclick='onTouchStartAndEnd("1")' class="arrows">Histórico</td>
         </tr>
       </table>
     </div>
@@ -214,7 +220,7 @@ void processAction(String inputValue)
     
   
     default:
-        
+        Serial.println("default");
       break;
   }
 }
@@ -245,7 +251,7 @@ void onWebSocketEvent(AsyncWebSocket *server,
                       AwsEventType type,
                       void *arg, 
                       uint8_t *data, 
-                      size_t len){                      
+                      size_t len){                  
   switch (type) 
   {
     case WS_EVT_CONNECT: //Caso conecte
@@ -262,11 +268,14 @@ void onWebSocketEvent(AsyncWebSocket *server,
       {
         std::string myData = "";
         myData.assign((char *)data, len);
+       
         processAction(myData.c_str());       
       }
       break;
     case WS_EVT_PONG:
-    case WS_EVT_ERROR:
+     Serial.printf("Pong");
+    case WS_EVT_ERROR: 
+    Serial.printf("Erro");
       break;
     default:
       break;  
@@ -282,6 +291,7 @@ void IRAM_ATTR funcao_ISR() {
 
 void IRAM_ATTR endMotor() {
   endCourse = true;
+  debounce = true;
 }
 
 
@@ -367,7 +377,14 @@ void loop() {
       interruption = false;
     }
     
-    if(endCourse){ 
+    if(debounce){
+      saveDebounceTimeout = millis();
+      debounce = false;
+    }
+
+    //se o tempo passado foi maior que o configurado para o debounce e o número de interrupções ocorridas é maior que ZERO (ou seja, ocorreu alguma), realiza os procedimentos
+    if( (millis() - saveDebounceTimeout) > DEBOUNCETIME && endCourse ){
+      
       bool state = getMotorState();
       digitalWrite(relayForward, LOW);
       digitalWrite(relayBackward, LOW);
