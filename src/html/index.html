@@ -1,41 +1,32 @@
+<!DOCTYPE html>
 <html>
   <head>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta charset="UTF-8">
     <style>
+      html{
+        height: 100%;
+        margin: 0;
+      }
       body {
-        height: 100vh;
+        margin: 0;
       }
      .flex {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100%;
-     }
-    .arrows {
-      font-size:50px;
-      color:red;
-    }
-    .circularArrows {
-      font-size:50px;
-      color:blue;
-    }
-    tr {
-      height: 20px;
+     } 
+     div{
+      height: auto;
       width: 100%;
     }
-    .alternative tr{
-      height: 20px;
-      width: 25px;
-    } 
-    td {
-      background-color:black;
-      border-radius:25%;
-      box-shadow: 5px 5px #888888;
-      width: 60px;
-    }
-    td:active {
+    div:active.controle {
       transform: translate(5px,5px);
       box-shadow: none; 
+    }
+
+    div .historico{
+      padding: 2%;
     }
     .noselect {
       -webkit-touch-callout: none; /* iOS Safari */
@@ -46,27 +37,61 @@
                 user-select: none; /* Non-prefixed version, currently
                                       supported by Chrome and Opera */
     }
+    table, th, td {
+      border: 1px solid black;
+    }
+
+    table{
+      width: 100%;
+    }
+
+    @media only screen and (max-width: 600px) {
+      html{
+        height: 100%;
+        width: 100%;
+        margin: 0;
+      }
+      body {
+        margin: 0;
+        padding: 3%;
+      }
+      .flex{
+        flex-direction: column;
+      }
+    }
     </style>
   </head>
   <body class="noselect" align="center" style="background-color:white">
+    <h1>Painel de controle portão eletrônico</h1>
     <div class=flex>
-      <table id="mainTable" style="display: inline-block;margin:auto;table-layout:fixed;text-align: center">
-        <tr>
-            <th>Acionamentos</th>
-          </tr>
-          <tr class="alternative">
-            <td ontouchstart='onTouchStartAndEnd("11")' class="arrows">Abrir/fechar portão</td>
-          </tr>
-      </table>
+      
+      <div ontouchstart='onTouchStartAndEnd("0")' onclick='onTouchStartAndEnd("0")' class="controle">
+        <h2>Abrir/Fechar portão</h2>
+        <img src="https://cdn.leroymerlin.com.br/products/controle_remoto_led_para_portao_command_preto_rcg_89057052_0002_600x600.jpg" width="250px" alt="Controle remoto digital">
+      </div>
   
-      <table id="mainTable" style="display:inline-block;margin:auto;table-layout:fixed">
-        <tr>
-          <th>Alternative buttons</th>
-        </tr>
-        <tr class="alternative">
-          <td ontouchstart='onTouchStartAndEnd("11")' class="arrows">Histórico</td>
-        </tr>
-      </table>
+      <div class="historico">
+        <h2>Histórico de abertura</h2>
+        <table>
+          <tr>
+            <th>Modo</th>
+            <th>Hora</th>
+            <th>Data</th>
+          </tr>
+          <tr>
+            <td>Abriu</td>
+            <td>12:55</td>
+            <td>24/10/2021</td>
+          </tr>
+          <tr>
+            <td>Fechou</td>
+            <td>12:56</td>
+            <td>24/10/2021</td>
+          </tr>
+        </table>
+        </table>
+      </div>     
+      
     </div>
     
     <script>
@@ -92,4 +117,4 @@
     </script>
     
   </body>
-</html>
+</html> 
