@@ -22,6 +22,7 @@
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
+#include <Ultrasonic.h>
 
 
 #define BACKWARD 0
@@ -30,6 +31,12 @@
 #define OPEN_CLOSE 0
 #define HISTORY 1
 
+#define TRIGGER 13
+#define ECHO 12
+Ultrasonic UltrasonicSensor(TRIGGER, ECHO);
+int gateWidth = 100;
+unsigned long waitTime = (1000 * 60 * 2); //Tempo em milissegundos, é multiplicado por 1000 e por 60 para mostrar o tempo em minutos.
+unsigned long lastOpenTime;
 
 AsyncWebServer server(80); //Declara um servidor com porta 80
 AsyncWebSocket ws("/ws"); //Declara um metodo para socket cliente
@@ -40,6 +47,8 @@ int relayForward = 26;
 int relayBackward = 25;
 int GPIO_BOTAO = 4;
 int GPIO_REED = 21;
+
+int wifiPin = 0;
 
 bool interruption = false;
 bool endCourse = false;
@@ -58,40 +67,29 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta charset="UTF-8">
     <style>
+      html{
+        height: 100%;
+        margin: 0;
+      }
       body {
-        height: 100vh;
+        margin: 0;
       }
      .flex {
         display: flex;
         justify-content: center;
         align-items: center;
-        height: 100%;
-     }
-    .arrows {
-      font-size:50px;
-      color:red;
-    }
-    .circularArrows {
-      font-size:50px;
-      color:blue;
-    }
-    tr {
-      height: 20px;
+     } 
+     div{
+      height: auto;
       width: 100%;
     }
-    .alternative tr{
-      height: 20px;
-      width: 25px;
-    } 
-    td {
-      background-color:black;
-      border-radius:25%;
-      box-shadow: 5px 5px #888888;
-      width: 60px;
-    }
-    td:active {
+    div:active.controle {
       transform: translate(5px,5px);
       box-shadow: none; 
+    }
+
+    div .historico{
+      padding: 2%;
     }
     .noselect {
       -webkit-touch-callout: none; /* iOS Safari */
@@ -102,27 +100,61 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
                 user-select: none; /* Non-prefixed version, currently
                                       supported by Chrome and Opera */
     }
+    table, th, td {
+      border: 1px solid black;
+    }
+
+    table{
+      width: 100%;
+    }
+
+    @media only screen and (max-width: 600px) {
+      html{
+        height: 100%;
+        width: 100%;
+        margin: 0;
+      }
+      body {
+        margin: 0;
+        padding: 3%;
+      }
+      .flex{
+        flex-direction: column;
+      }
+    }
     </style>
   </head>
   <body class="noselect" align="center" style="background-color:white">
+    <h1>Painel de controle portão eletrônico</h1>
     <div class=flex>
-      <table id="mainTable" style="display: inline-block;margin:auto;table-layout:fixed;text-align: center">
-        <tr>
-            <th>Acionamentos</th>
-          </tr>
-          <tr class="alternative">
-            <td ontouchstart='onTouchStartAndEnd("0")' onclick='onTouchStartAndEnd("0")' class="arrows">Abrir/fechar portão</td>
-          </tr>
-      </table>
+      
+      <div ontouchstart='onTouchStartAndEnd("0")' onclick='onTouchStartAndEnd("0")' class="controle">
+        <h2>Abrir/Fechar portão</h2>
+        <img src="https://cdn.leroymerlin.com.br/products/controle_remoto_led_para_portao_command_preto_rcg_89057052_0002_600x600.jpg" width="250px" alt="Controle remoto digital">
+      </div>
   
-      <table id=testTable" style="display:inline-block;margin:auto;table-layout:fixed">
-        <tr>
-          <th>Alternative buttons</th>
-        </tr>
-        <tr class="alternative">
-          <td ontouchstart='onTouchStartAndEnd("1")' onclick='onTouchStartAndEnd("1")' class="arrows">Histórico</td>
-        </tr>
-      </table>
+      <div class="historico">
+        <h2>Histórico de abertura</h2>
+        <table>
+          <tr>
+            <th>Modo</th>
+            <th>Hora</th>
+            <th>Data</th>
+          </tr>
+          <tr>
+            <td>Abriu</td>
+            <td>12:55</td>
+            <td>24/10/2021</td>
+          </tr>
+          <tr>
+            <td>Fechou</td>
+            <td>12:56</td>
+            <td>24/10/2021</td>
+          </tr>
+        </table>
+        </table>
+      </div>     
+      
     </div>
     
     <script>
@@ -195,6 +227,7 @@ void startStopMotor() {
       setMotorState(!state);
       motorRunning = false;
       Serial.println(getMotorState());
+      lastOpenTime = millis();
     }
 
 }
@@ -224,8 +257,6 @@ void processAction(String inputValue)
       break;
   }
 }
-
-
 
 
 
@@ -312,34 +343,37 @@ void setup() {
 
     pinMode(relayForward, OUTPUT);
     pinMode(relayBackward, OUTPUT);
+    pinMode(wifiPin, OUTPUT);
     pinMode(GPIO_BOTAO, INPUT);
     pinMode(GPIO_REED, INPUT);
 
     attachInterrupt(digitalPinToInterrupt(GPIO_BOTAO), funcao_ISR, RISING);
     attachInterrupt(digitalPinToInterrupt(GPIO_REED), endMotor, RISING);
-    //WiFiManager
-    //Local intialization. Once its business is done, there is no need to keep it around
-    WiFiManager wifiManager;
-    //reset saved settings
-    //wifiManager.resetSettings();
 
-    //wifiManager.setSTAStaticIPConfig(IPAddress(192,168,100,99), IPAddress(192,168,100,1), IPAddress(255,255,255,0));
-    
-    //set custom ip for portal
-    //wifiManager.setAPStaticIPConfig(IPAddress(192,168,1,254), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
+    if(digitalRead(wifiPin)){
+      //WiFiManager
+      //Local intialization. Once its business is done, there is no need to keep it around
+      WiFiManager wifiManager;
+      //reset saved settings
+      //wifiManager.resetSettings();
 
-    //fetches ssid and pass from eeprom and tries to connect
-    //if it does not connect it starts an access point with the specified name
-    //here  "AutoConnectAP"
-    //and goes into a blocking loop awaiting configuration
-    wifiManager.autoConnect("AutoConnectAP");
-    //or use this for auto generated name ESP + ChipID
-    //wifiManager.autoConnect();
+      //wifiManager.setSTAStaticIPConfig(IPAddress(192,168,100,99), IPAddress(192,168,100,1), IPAddress(255,255,255,0));
+      
+      //set custom ip for portal
+      //wifiManager.setAPStaticIPConfig(IPAddress(192,168,1,254), IPAddress(10,0,1,1), IPAddress(255,255,255,0));
 
-    
-    //if you get here you have connected to the WiFi
-    Serial.println("connected...yeey :)");
+      //fetches ssid and pass from eeprom and tries to connect
+      //if it does not connect it starts an access point with the specified name
+      //here  "AutoConnectAP"
+      //and goes into a blocking loop awaiting configuration
+      wifiManager.autoConnect("AutoConnectAP");
+      //or use this for auto generated name ESP + ChipID
+      //wifiManager.autoConnect();
 
+      
+      //if you get here you have connected to the WiFi
+      Serial.println("connected...yeey :)");
+    }
     
     if(WiFi.SSID() != "ESP_AP"){
       Serial.println("Não é ESP-Ap");
@@ -392,6 +426,14 @@ void loop() {
       motorRunning = false;
       debounce = false;
       endCourse = false;
+    }
+
+    if( (millis() - lastOpenTime) > waitTime){
+      float CmDistance = UltrasonicSensor.convert(UltrasonicSensor.timing(), Ultrasonic::CM);
+
+      if(CmDistance >= gateWidth){
+        startStopMotor();
+      }
     }
 
 }
