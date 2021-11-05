@@ -23,6 +23,25 @@
 #include <ESPAsyncWebServer.h>
 #include <EEPROM.h>
 #include <Ultrasonic.h>
+#include "time.h"
+#include <ArduinoJson.h>
+
+// NTP server to request epoch time
+const char* ntpServer = "pool.ntp.org";
+
+unsigned int epochTime; 
+
+unsigned int getTime() {
+  time_t now;
+  struct tm timeinfo;
+  if (!getLocalTime(&timeinfo)) {
+    //Serial.println("Failed to obtain time");
+    return(0);
+  }
+  time(&now);
+  return now;
+}
+
 
 
 #define BACKWARD 0
@@ -35,8 +54,9 @@
 #define ECHO 12
 Ultrasonic UltrasonicSensor(TRIGGER, ECHO);
 int gateWidth = 100;
-unsigned long waitTime = (1000 * 60 * 2); //Tempo em milissegundos, é multiplicado por 1000 e por 60 para mostrar o tempo em minutos.
+unsigned long waitTime = (1000 * 60 * 10); //Tempo em milissegundos, é multiplicado por 1000 e por 60 para mostrar o tempo em minutos.
 unsigned long lastOpenTime;
+bool autoClose = false;
 
 AsyncWebServer server(80); //Declara um servidor com porta 80
 AsyncWebSocket ws("/ws"); //Declara um metodo para socket cliente
@@ -48,7 +68,7 @@ int relayBackward = 25;
 int GPIO_BOTAO = 4;
 int GPIO_REED = 21;
 
-int wifiPin = 0;
+int wifiPin = 23;
 
 bool interruption = false;
 bool endCourse = false;
@@ -209,6 +229,9 @@ void startStopMotor() {
     Serial.println("startStopMotor");
     Serial.println(state);
 
+    epochTime = getTime();
+    
+
     if(state == FORWARD && !motorRunning){ //FORWARD
 
         digitalWrite(relayForward, HIGH);
@@ -267,7 +290,7 @@ void handleRoot(AsyncWebServerRequest *request) //Para a raiz do servidor execut
 
 void handleHistory(AsyncWebServerRequest *request) //Para a raiz do servidor executa o HTML
 {
-  request->send_P(200, "text/html", htmlHomePage);
+  //request->send_P(200, "application/json", json);
 }
 
 void handleNotFound(AsyncWebServerRequest *request)  //Para página não encontrada, escreve "arquivo não encontrada"
@@ -350,6 +373,9 @@ void setup() {
     attachInterrupt(digitalPinToInterrupt(GPIO_BOTAO), funcao_ISR, RISING);
     attachInterrupt(digitalPinToInterrupt(GPIO_REED), endMotor, RISING);
 
+
+    configTime(0, 0, ntpServer);
+
     if(digitalRead(wifiPin)){
       //WiFiManager
       //Local intialization. Once its business is done, there is no need to keep it around
@@ -379,7 +405,15 @@ void setup() {
       Serial.println("Não é ESP-Ap");
 
       server.on("/", HTTP_GET, handleRoot); //Caso o cliente entre na rota raiz, executa handleRoot
-      server.on("/history", HTTP_GET, handleHistory); //Caso o cliente entre na rota raiz, executa handleRoot
+      server.on("/history", HTTP_GET, [](AsyncWebServerRequest *request) {
+        AsyncResponseStream *response = request->beginResponseStream("application/json");
+        DynamicJsonDocument json(1024);
+        json["status"] = "ok";
+        json["ssid"] = WiFi.SSID();
+        json["ip"] = WiFi.localIP().toString();
+        serializeJson(json, *response);
+        request->send(response);
+      }); //Caso o cliente entre na rota raiz, executa handleRoot
       server.onNotFound(handleNotFound);//Caso o cliente entre fora da rota raiz, executa handleNotFound
       
       ws.onEvent(onWebSocketEvent); //Quando houver uma mudança no wesocket executa a função de callback onWebSocketEvent
@@ -406,6 +440,7 @@ void loop() {
     }
 
     if(interruption){ 
+      Serial.println("controle");
       startStopMotor();
       interruption = false;
     }
@@ -419,6 +454,7 @@ void loop() {
     //se o tempo passado foi maior que o configurado para o debounce e o número de interrupções ocorridas é maior que ZERO (ou seja, ocorreu alguma), realiza os procedimentos
     if( (millis() - saveDebounceTimeout) > DEBOUNCETIME && digitalRead(21) && debounce){
       
+      Serial.println("reed");
       bool state = getMotorState();
       digitalWrite(relayForward, LOW);
       digitalWrite(relayBackward, LOW);
@@ -431,9 +467,15 @@ void loop() {
     if( (millis() - lastOpenTime) > waitTime){
       float CmDistance = UltrasonicSensor.convert(UltrasonicSensor.timing(), Ultrasonic::CM);
 
-      if(CmDistance >= gateWidth){
+      Serial.print("Ultrasonic: ");
+      Serial.println(CmDistance);
+
+      if(CmDistance >= gateWidth && !autoClose){
+        Serial.println("ultrassonico");
         startStopMotor();
+        autoClose = true;
       }
     }
+    
 
 }

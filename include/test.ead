@@ -1,0 +1,60 @@
+int button = 2;
+int motor = 4;
+int led = 11;
+bool motorState;
+bool lastMotorState = false;
+
+unsigned long lastBlink = millis();
+bool lastLedState = false;
+
+void change() {
+  motorState = !motorState;
+}
+
+void ledBlink(int requestedTime) {
+    if((millis() - lastBlink) > requestedTime && lastLedState == false){
+      
+      lastLedState = true;
+      digitalWrite(led, HIGH);
+      lastBlink = millis();
+    }
+
+    if((millis() - lastBlink) > requestedTime && lastLedState == true){
+      
+      lastLedState = false;
+      digitalWrite(led, LOW);
+      lastBlink = millis();
+    }
+}
+
+void setup()
+{
+  Serial.begin(9600);
+  pinMode(button, INPUT);
+  pinMode(motor, OUTPUT);
+  attachInterrupt(digitalPinToInterrupt(button), change, CHANGE);
+  motorState = LOW;
+}
+
+void loop()
+{
+  digitalWrite(motor, motorState);
+  
+  if(motorState != lastMotorState){
+    if(motorState){
+      Serial.println("ATENCAO! Motor ligado");
+    }else{
+      Serial.println("Motor desligado");
+    }
+    lastMotorState = motorState;
+  }
+  
+  if(motorState){
+    ledBlink(250);
+  }else{
+  	digitalWrite(led, LOW);
+  }
+  
+  delay(100);
+  
+}
