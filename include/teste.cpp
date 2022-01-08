@@ -36,12 +36,10 @@ void readEeprom(){
             bytes[3] = EEPROM.read(index + 4);
             type = EEPROM.read(index + 5);
 
-            int epochtime = byteToInt(bytes[]);
+            int epochtime = byteToInt(bytes);
 
-            
         }
     }
-
 
 }
 

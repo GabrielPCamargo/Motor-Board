@@ -26,6 +26,13 @@
 #include "time.h"
 #include <ArduinoJson.h>
 
+#include <vector>
+
+using namespace std;
+
+vector<int> arr;
+
+
 // NTP server to request epoch time
 const char* ntpServer = "pool.ntp.org";
 
@@ -203,6 +210,80 @@ const char* htmlHomePage PROGMEM = R"HTMLHOMEPAGE(
 </html> 
 )HTMLHOMEPAGE";
 
+
+#include <EEPROM.h> //ok boomer
+
+//eeprom addres save in the address 1;
+char intToByte(int n){
+    char bytes[4];
+
+    bytes[0] = (n >> 24) & 0xFF;
+    bytes[1] = (n >> 16) & 0xFF;
+    bytes[2] = (n >> 8) & 0xFF;
+    bytes[3] = n & 0xFF;
+
+    return bytes;
+
+}
+
+int byteToInt(unsigned char bytes[4]) {
+    int num;
+
+
+    for(int i = 0; i < 4; i++){
+        num <<= 8;
+        num |= bytes[i];
+    }
+
+    return num;
+}
+
+// To save date in eeprom we'll need at least 4bytes for unix timestamp. ainda precisa pegar o tempo no esp32
+void saveInEeprom(unsigned char bytes[4], int type) {
+
+    int lastAddress = EEPROM.read(1);
+
+    lastAddress += 6;
+
+    //Para ir até o endereço 4092 no máximo, utilizando-se de 4096 bytes
+    if(lastAddress > 4086) lastAddress = 6;
+
+    EEPROM.write(lastAddress, 255);
+    EEPROM.write((lastAddress + 1), bytes[0]);
+    EEPROM.write((lastAddress + 2), bytes[1]);
+    EEPROM.write((lastAddress + 3), bytes[2]);
+    EEPROM.write((lastAddress + 4), bytes[3]);
+    EEPROM.write((lastAddress + 5), type);
+    EEPROM.write(1, lastAddress);
+
+}
+
+void readEeprom(){
+
+    unsigned char bytes[4] = {};
+    int type[] = {};
+    int times[] = {};
+    int contador = 0;
+
+    for (int index = 1 ; index < 4595 ; index++) {
+        if(EEPROM.read(index) == 255){
+            bytes[0] = EEPROM.read(index + 1);
+            bytes[1] = EEPROM.read(index + 2);
+            bytes[2] = EEPROM.read(index + 3);
+            bytes[3] = EEPROM.read(index + 4);
+            type[contador] = EEPROM.read(index + 5);
+            contador++;
+
+            int epochtime = byteToInt(bytes);
+
+            arr.push_back(epochtime);
+
+        }
+    }
+
+}
+
+
 //pega o valor de estado da eeprom
 bool getMotorState() {
   return EEPROM.read(0);
@@ -357,7 +438,7 @@ void setup() {
 
 //Interrupção para controle e uma para página web.
 
-    
+   
 
     EEPROM.begin(1);
 
@@ -408,6 +489,9 @@ void setup() {
       server.on("/history", HTTP_GET, [](AsyncWebServerRequest *request) {
         AsyncResponseStream *response = request->beginResponseStream("application/json");
         DynamicJsonDocument json(1024);
+
+        
+
         json["status"] = "ok";
         json["ssid"] = WiFi.SSID();
         json["ip"] = WiFi.localIP().toString();
@@ -477,5 +561,7 @@ void loop() {
       }
     }
     
+  
+    delay(100);
 
 }
